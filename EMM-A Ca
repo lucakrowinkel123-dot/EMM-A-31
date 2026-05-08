@@ -117,6 +117,7 @@ IMyTimerBlock _cachedPathTimer;
 IMyTimerBlock _cachedZoneDbTimer;
 IMyTimerBlock _cachedStateIniTimer;
 const string StateIniSection = "state";
+MyIni _stateIni = new MyIni();
 
 bool goToMode = false;
 int goToStage = 0; // 1 = flying to safe side-point, 2 = final approach to saved carrier pose
@@ -201,7 +202,7 @@ public void Main(string argument, UpdateType updateSource)
         if (runtime % echoFrequency == 0)
         {
             WriteEcho();
-            SaveStateProgressOnly();
+            SaveState();
         }
 
         if (autopilotEnabled && hasTarget)
@@ -2147,7 +2148,8 @@ IMyTimerBlock FindStateIniTimer()
 
 void SaveState()
 {
-    MyIni ini = new MyIni();
+    MyIni ini = _stateIni;
+    ini.Clear();
     ini.Set(StateIniSection, "autopilotEnabled", autopilotEnabled ? "1" : "0");
     ini.Set(StateIniSection, "hasTarget", hasTarget ? "1" : "0");
     ini.Set(StateIniSection, "targetPosition", V3ToString(targetPosition));
@@ -2175,11 +2177,6 @@ void SaveState()
     ini.Set(StateIniSection, "mineStationaryTicks", mineStationaryTicks);
     ini.Set(StateIniSection, "fullAutoEnabled", fullAutoEnabled ? "1" : "0");
     WriteStateIni(ini);
-}
-
-void SaveStateProgressOnly()
-{
-    SaveState();
 }
 
 void LoadState()

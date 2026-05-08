@@ -223,6 +223,7 @@ bool _invCached = false;
 IMyTimerBlock _cachedPathTimer;
 IMyTimerBlock _cachedStateIniTimer;
 const string StateIniSection = "state";
+MyIni _stateIni = new MyIni();
 int indicatorDelayTicksRemaining = 0;
 int indicatorFlashTicksRemaining = 0;
 enum IndicatorTransitionState { None, WaitEnableAfterColor, WaitNeutralAfterDisable }
@@ -286,7 +287,7 @@ public void Main (string argument, UpdateType updateSource)
         if (runtime % echoFrequency == 0)
         {
             WriteEcho();
-            SaveStateProgressOnly();
+            SaveState();
         }
 
         if (miningEnabled)
@@ -2697,7 +2698,8 @@ IMyTimerBlock FindStateIniTimer()
 
 void SaveState()
 {
-    MyIni ini = new MyIni();
+    MyIni ini = _stateIni;
+    ini.Clear();
     ini.Set(StateIniSection, "autopilotEnabled", autopilotEnabled ? "1" : "0");
     ini.Set(StateIniSection, "hasTarget", hasTarget ? "1" : "0");
     ini.Set(StateIniSection, "targetPosition", V3ToString(targetPosition));
@@ -2757,11 +2759,6 @@ void SaveState()
     ini.Set(StateIniSection, "dockConnectRecompileArmed", dockConnectRecompileArmed ? "1" : "0");
     ini.Set(StateIniSection, "connectorOffsetLocal", V3ToString(connectorOffsetLocal));
     WriteStateIni(ini);
-}
-
-void SaveStateProgressOnly()
-{
-    SaveState();
 }
 
 void LoadState()

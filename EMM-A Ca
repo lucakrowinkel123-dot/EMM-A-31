@@ -117,6 +117,13 @@ IMyTimerBlock _cachedPathTimer;
 IMyTimerBlock _cachedZoneDbTimer;
 IMyTimerBlock _cachedStateIniTimer;
 const string StateIniSection = "state";
+MyIni _stateIni = new MyIni();
+// Counts SaveStateProgressOnly calls since the last full SaveState. When this
+// hits FullSaveCadence we promote the next progress save to a full save so that
+// fields not covered by the progress-only path (e.g. path anchor pose, mine
+// saved pose, full pathRecords list) get re-snapshotted periodically.
+int _progressSavesSinceFull = 0;
+const int FullSaveCadence = 10;
 
 bool goToMode = false;
 int goToStage = 0; // 1 = flying to safe side-point, 2 = final approach to saved carrier pose
@@ -2147,7 +2154,9 @@ IMyTimerBlock FindStateIniTimer()
 
 void SaveState()
 {
-    MyIni ini = new MyIni();
+    _progressSavesSinceFull = 0;
+    MyIni ini = _stateIni;
+    ini.Clear();
     ini.Set(StateIniSection, "autopilotEnabled", autopilotEnabled ? "1" : "0");
     ini.Set(StateIniSection, "hasTarget", hasTarget ? "1" : "0");
     ini.Set(StateIniSection, "targetPosition", V3ToString(targetPosition));
@@ -2177,9 +2186,35 @@ void SaveState()
     WriteStateIni(ini);
 }
 
+// Cheap save: updates only the volatile bool/int/enum fields onto the cached
+// _stateIni and rewrites the INI string. Skips V3ToString calls and the
+// pathRecords loop. Stable fields (path anchor, mine saved pose, area lanes,
+// pathRecord{i}) are preserved from whatever the last full SaveState wrote
+// into _stateIni. Every FullSaveCadence calls we promote to a full SaveState
+// so any stable field that changed mid-sequence still gets captured.
 void SaveStateProgressOnly()
 {
-    SaveState();
+    if (_progressSavesSinceFull >= FullSaveCadence)
+    {
+        SaveState();
+        return;
+    }
+    _progressSavesSinceFull++;
+
+    MyIni ini = _stateIni;
+    ini.Set(StateIniSection, "autopilotEnabled", autopilotEnabled ? "1" : "0");
+    ini.Set(StateIniSection, "hasTarget", hasTarget ? "1" : "0");
+    ini.Set(StateIniSection, "pathMode", pathMode ? "1" : "0");
+    ini.Set(StateIniSection, "pathPaused", pathPaused ? "1" : "0");
+    ini.Set(StateIniSection, "pathPausedNavResume", pathPausedNavResume ? "1" : "0");
+    ini.Set(StateIniSection, "pathIndex", pathIndex);
+    ini.Set(StateIniSection, "pathAnchorValid", pathAnchorValid ? "1" : "0");
+    ini.Set(StateIniSection, "mineSequenceState", (int)mineSequenceState);
+    ini.Set(StateIniSection, "mineAsteroidNum", mineAsteroidNum);
+    ini.Set(StateIniSection, "minerPathCompleteReceived", minerPathCompleteReceived ? "1" : "0");
+    ini.Set(StateIniSection, "mineStationaryTicks", mineStationaryTicks);
+    ini.Set(StateIniSection, "fullAutoEnabled", fullAutoEnabled ? "1" : "0");
+    WriteStateIni(ini);
 }
 
 void LoadState()

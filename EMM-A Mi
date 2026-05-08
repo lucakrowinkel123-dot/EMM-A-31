@@ -223,6 +223,14 @@ bool _invCached = false;
 IMyTimerBlock _cachedPathTimer;
 IMyTimerBlock _cachedStateIniTimer;
 const string StateIniSection = "state";
+MyIni _stateIni = new MyIni();
+// Counts SaveStateProgressOnly calls since the last full SaveState. When this
+// hits FullSaveCadence we promote the next progress save to a full save so
+// that fields not covered by the progress-only path (e.g. path anchor pose,
+// mine lane anchor, area lane list, full pathRecords list) get re-snapshotted
+// periodically.
+int _progressSavesSinceFull = 0;
+const int FullSaveCadence = 10;
 int indicatorDelayTicksRemaining = 0;
 int indicatorFlashTicksRemaining = 0;
 enum IndicatorTransitionState { None, WaitEnableAfterColor, WaitNeutralAfterDisable }
@@ -2697,7 +2705,9 @@ IMyTimerBlock FindStateIniTimer()
 
 void SaveState()
 {
-    MyIni ini = new MyIni();
+    _progressSavesSinceFull = 0;
+    MyIni ini = _stateIni;
+    ini.Clear();
     ini.Set(StateIniSection, "autopilotEnabled", autopilotEnabled ? "1" : "0");
     ini.Set(StateIniSection, "hasTarget", hasTarget ? "1" : "0");
     ini.Set(StateIniSection, "targetPosition", V3ToString(targetPosition));
@@ -2759,9 +2769,58 @@ void SaveState()
     WriteStateIni(ini);
 }
 
+// Cheap save: updates only the volatile bool/int/enum/double fields onto the
+// cached _stateIni and rewrites the INI string. Skips V3ToString calls and
+// the per-record loops (areaLane{i}, pathRecord{i}). Stable fields preserved
+// in _stateIni (lane anchor, drill axis, area entry pose, path anchor pose,
+// path record mine corners, etc.) come from whatever the last full SaveState
+// wrote. Every FullSaveCadence calls we promote to a full SaveState so any
+// stable field that changed mid-sequence still gets captured.
 void SaveStateProgressOnly()
 {
-    SaveState();
+    if (_progressSavesSinceFull >= FullSaveCadence)
+    {
+        SaveState();
+        return;
+    }
+    _progressSavesSinceFull++;
+
+    MyIni ini = _stateIni;
+    ini.Set(StateIniSection, "autopilotEnabled", autopilotEnabled ? "1" : "0");
+    ini.Set(StateIniSection, "hasTarget", hasTarget ? "1" : "0");
+    ini.Set(StateIniSection, "miningEnabled", miningEnabled ? "1" : "0");
+    ini.Set(StateIniSection, "miningState", (int)miningState);
+    ini.Set(StateIniSection, "laneDepth", laneDepth.ToString("R"));
+    ini.Set(StateIniSection, "activeMaxSpeed", activeMaxSpeed.ToString("R"));
+    ini.Set(StateIniSection, "depthMode", (int)depthMode);
+    ini.Set(StateIniSection, "areaMiningMode", areaMiningMode ? "1" : "0");
+    ini.Set(StateIniSection, "areaLaneIndex", areaLaneIndex);
+    ini.Set(StateIniSection, "returnToMinePoseAfterArea", returnToMinePoseAfterArea ? "1" : "0");
+    ini.Set(StateIniSection, "retryLane", retryCurrentLane ? "1" : "0");
+    ini.Set(StateIniSection, "stuckBackout", stuckBackout ? "1" : "0");
+    ini.Set(StateIniSection, "stuckRetryCount", stuckRetryCount);
+    ini.Set(StateIniSection, "pathMode", pathMode ? "1" : "0");
+    ini.Set(StateIniSection, "pathPaused", pathPaused ? "1" : "0");
+    ini.Set(StateIniSection, "pathPausedNavResume", pathPausedNavResume ? "1" : "0");
+    ini.Set(StateIniSection, "pathIndex", pathIndex);
+    ini.Set(StateIniSection, "pathAnchorValid", pathAnchorValid ? "1" : "0");
+    ini.Set(StateIniSection, "pathRecordingEnabled", pathRecordingEnabled ? "1" : "0");
+    ini.Set(StateIniSection, "pathRecordingPaused", pathRecordingPaused ? "1" : "0");
+    ini.Set(StateIniSection, "pathRecordingWaitReturn", pathRecordingWaitReturn ? "1" : "0");
+    ini.Set(StateIniSection, "pathRecordCounter", pathRecordCounter);
+    ini.Set(StateIniSection, "pathRecordMineCounter", pathRecordMineCounter);
+    ini.Set(StateIniSection, "pathRecordMineStage", (int)pathRecordMineStage);
+    ini.Set(StateIniSection, "pathRecordMeters", pathRecordMeters.ToString("R"));
+    ini.Set(StateIniSection, "pathRecordMineDepth", pathRecordMineDepth.ToString("R"));
+    ini.Set(StateIniSection, "cockpitGyroForcedOff", cockpitGyroControlForcedOff ? "1" : "0");
+    ini.Set(StateIniSection, "dockingState", (int)dockingState);
+    ini.Set(StateIniSection, "dockSyncMode", dockSyncMode ? "1" : "0");
+    ini.Set(StateIniSection, "undockRecompileTicksRemaining", undockRecompileTicksRemaining);
+    ini.Set(StateIniSection, "dockMergeReadyTicks", dockMergeReadyTicks);
+    ini.Set(StateIniSection, "dockConnectRetryTicks", dockConnectRetryTicks);
+    ini.Set(StateIniSection, "dockConnectRecompileTicksRemaining", dockConnectRecompileTicksRemaining);
+    ini.Set(StateIniSection, "dockConnectRecompileArmed", dockConnectRecompileArmed ? "1" : "0");
+    WriteStateIni(ini);
 }
 
 void LoadState()
